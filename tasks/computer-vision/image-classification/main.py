@@ -217,6 +217,17 @@ def main(args):
         print('Model saved into {}'.format(saved_estimator_path))
 
 
+def str2bool(v):
+    if isinstance(v, bool):
+       return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Training parameters')
     parser.add_argument('--batch_size', type=int, default=100,
@@ -228,7 +239,7 @@ if __name__ == '__main__':
                         help='Optimizer to use')
     parser.add_argument('--num_epochs', type=int, default=1,
                         help='Number of epochs to train')
-    parser.add_argument('--early_stopping', action="store_true",
+    parser.add_argument('--early_stopping', type=str2bool, default=False,# action="store_true",
                         help='Stop training according to loss value')
     parser.add_argument('--es_max_steps_no_decrease', type=int, default=50,
                         help='Early stopping max steps without loss decrease to stop training')

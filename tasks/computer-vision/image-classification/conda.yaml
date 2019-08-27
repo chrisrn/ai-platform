@@ -1,0 +1,10 @@
+name: image-classification
+channels:
+  - defaults
+dependencies:
+  - python=2.7
+  - numpy=1.16.4
+  - pip
+  - pip:
+    - tensorflow>=1.13.1
+    - mlflow>=1.0

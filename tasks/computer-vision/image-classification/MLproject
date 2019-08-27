@@ -1,0 +1,27 @@
+name: image-classification
+
+conda_env: conda.yaml
+
+entry_points:
+
+  main:
+    parameters:
+      batch_size: {type: int, default: 100}
+      learning_rate: {type: float, default: 0.001}
+      optimizer: {type: string, default: 'gd'}
+      num_epochs: {type: int, default: 1}
+      early_stopping: {type: bool, default: False}
+      es_max_steps_no_decrease: {type: int, default: 50}
+      model_dir: {type: string, default: '/tmp/mnist_convnet_model'}
+      data_dir: {type: string, default: '/tmp/tf_data'}
+      
+    
+    command: "python main.py --batch_size {batch_size}
+                             --learning_rate {learning_rate}
+                             --optimizer {optimizer}
+                             --early_stopping {early_stopping}
+                             --es_max_steps_no_decrease {es_max_steps_no_decrease}
+                             --num_epochs {num_epochs}
+                             --model_dir {model_dir}
+                             --data_dir {data_dir}"
+    
