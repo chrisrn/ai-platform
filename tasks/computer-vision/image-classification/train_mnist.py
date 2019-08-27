@@ -5,12 +5,6 @@ import argparse
 import numpy as np
 import mlflow
 import mlflow.tensorflow
-from mlflow import pyfunc
-from tensorflow.python.saved_model import tag_constants
-import tempfile
-import pandas as pd
-import shutil
-import os
 
 
 tf.logging.set_verbosity(tf.logging.INFO)
