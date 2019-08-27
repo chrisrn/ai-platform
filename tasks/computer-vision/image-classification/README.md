@@ -19,27 +19,17 @@ pip install https://storage.googleapis.com/tensorflow/linux/cpu/tensorflow-1.14.
 ```
 
 ## How to run
-After installing all dependencies you are ready to train and evaluate the model like that:
+After installing all dependencies you are ready to train and evaluate the model. Move inside tasks/computer-vision
+folder and run:
 ```
-python train_mnist.py --batch_size {batch_size }
-                      --learning_rate {learning_rate}
-                      --optimizer {optimizer}
-                      --num_epochs {num_epochs}
-                      --model_dir {model_dir}
-                      --data_dir {data_dir}
+mlflow run image-classification
 ```
 
 You can also enable early stopping like that:
 ```
-python train_mnist.py --batch_size {batch_size }
-                      --learning_rate {learning_rate}
-                      --optimizer {optimizer}
-                      --num_epochs {num_epochs}
-                      --model_dir {model_dir}
-                      --data_dir {data_dir}
-                      --early_stopping
-                      --es_max_steps_no_decrease {es_max_steps_no_decrease}
+mlflow run image-classification -P early_stopping=True
 ```
+
 Running again the script with the same model_dir, you fine-tune on the previous model. So if you want to train
 from scratch delete the previous model_dir or feed a different path from the previous one.
 
