@@ -5,17 +5,46 @@ import argparse
 import numpy as np
 import mlflow
 import mlflow.tensorflow
+from mlflow import pyfunc
+from tensorflow.python.saved_model import tag_constants
+import tempfile
+import pandas as pd
+import shutil
+import os
+
 
 tf.logging.set_verbosity(tf.logging.INFO)
 
 
-def cnn_model_fn(features, labels, mode):
+def get_optimizer(lr, opt):
+    """
+    Choose optimizer
+    :param lr: int learning rate
+    :param opt: str optimizer type
+    :return: tf.train object for optimizer
+    """
+    if opt == "gd":
+        return tf.train.GradientDescentOptimizer(learning_rate=lr)
+    elif opt == "adam":
+        return tf.train.AdamOptimizer(learning_rate=lr)
+    elif opt == "rms":
+        return tf.train. RMSPropOptimizer(learning_rate=lr)
+    elif opt == "adadelta":
+        return tf.train.AdadeltaOptimizer(learning_rate=lr)
+    elif opt == "adagrad":
+        return tf.train.AdagradOptimizer(learning_rate=lr)
+    else:
+        raise ValueError("Wrong value for optimizer")
+
+
+def cnn_model_fn(features, labels, mode, params):
     """
     Model function for CNN
-    :param features:
-    :param labels:
-    :param mode:
-    :return:
+    :param features: input tensor
+    :param labels: labels tensor
+    :param mode: training or evaluation mode
+    :param params: dictionary with training params
+    :return: estimator experiment results
     """
 
     # Input Layer
@@ -48,11 +77,12 @@ def cnn_model_fn(features, labels, mode):
       inputs=dense, rate=0.4, training=mode == tf.estimator.ModeKeys.TRAIN)
 
     # Logits Layer
-    logits = tf.layers.dense(inputs=dropout, units=10)
+    logits = tf.layers.dense(inputs=dropout, units=10, name="logits")
+    # classes = tf.argmax(input=logits, axis=1, name="predictions")
 
     predictions = {
       # Generate predictions (for PREDICT and EVAL mode)
-      "classes": tf.argmax(input=logits, axis=1),
+      "classes": tf.argmax(input=logits, axis=1, name="predictions"),
       # Add `softmax_tensor` to the graph. It is used for PREDICT and by the
       # `logging_hook`.
       "probabilities": tf.nn.softmax(logits, name="softmax_tensor")
@@ -66,7 +96,7 @@ def cnn_model_fn(features, labels, mode):
 
     # Configure the Training Op (for TRAIN mode)
     if mode == tf.estimator.ModeKeys.TRAIN:
-        optimizer = tf.train.GradientDescentOptimizer(learning_rate=0.001)
+        optimizer = get_optimizer(params['learning_rate'], params['optimizer'])
         train_op = optimizer.minimize(
             loss=loss,
             global_step=tf.train.get_global_step())
@@ -81,14 +111,14 @@ def cnn_model_fn(features, labels, mode):
       mode=mode, loss=loss, eval_metric_ops=eval_metric_ops)
 
 
-def get_data():
+def get_data(data_path):
     """
     Function for downloading mnist data and normalize them
-    :return: all the data
+    :return: numpy arrays with all the data
     """
 
     ((train_data, train_labels),
-     (eval_data, eval_labels)) = tf.keras.datasets.mnist.load_data()
+     (eval_data, eval_labels)) = tf.keras.datasets.mnist.load_data(data_path)
 
     train_data = train_data / np.float32(255)
     train_labels = train_labels.astype(np.int32)
@@ -103,13 +133,16 @@ def estimator_creation(args, train_data, train_labels):
     """
 
     :param args:
-    :param train_data:
-    :param train_labels:
-    :return:
+    :param train_data: numpy array with training data
+    :param train_labels: numpy array with training labels
+    :return: classifier estimator object and input function estimator object
     """
 
     mnist_classifier = tf.estimator.Estimator(
-        model_fn=cnn_model_fn, model_dir=args.model_dir)
+        model_fn=cnn_model_fn,
+        model_dir=args.model_dir,
+        params={"learning_rate": args.learning_rate,
+                "optimizer": args.optimizer})
 
     # Train the model
     train_input_fn = tf.estimator.inputs.numpy_input_fn(
@@ -122,9 +155,10 @@ def estimator_creation(args, train_data, train_labels):
     return mnist_classifier, train_input_fn
 
 
-def train_and_evaluate(mnist_classifier, train_input_fn, eval_data, eval_labels):
+def train_and_evaluate(args, mnist_classifier, train_input_fn, eval_data, eval_labels):
     """
 
+    :param args:
     :param mnist_classifier:
     :param train_input_fn:
     :param eval_data:
@@ -137,13 +171,12 @@ def train_and_evaluate(mnist_classifier, train_input_fn, eval_data, eval_labels)
         early_stopping = tf.estimator.experimental.stop_if_no_decrease_hook(
             mnist_classifier,
             metric_name='loss',
-            max_steps_without_decrease=1000,
-            min_steps=100)
+            max_steps_without_decrease=args.es_max_steps_no_decrease,
+            min_steps=10)
         hooks.append(early_stopping)
 
     mnist_classifier.train(
         input_fn=train_input_fn,
-        steps=1,
         hooks=hooks)
 
     eval_input_fn = tf.estimator.inputs.numpy_input_fn(
@@ -153,34 +186,62 @@ def train_and_evaluate(mnist_classifier, train_input_fn, eval_data, eval_labels)
         shuffle=False)
 
     eval_results = mnist_classifier.evaluate(input_fn=eval_input_fn)
-    mlflow.log_metric("Evaluation loss", eval_results['loss'], step=1)
-    mlflow.log_metric("Evaluation accuracy", eval_results['accuracy'], step=1)
-    # print(eval_results)
+
+    mlflow.log_metric("Evaluation loss", eval_results['loss'])
+    mlflow.log_metric("Evaluation accuracy", eval_results['accuracy'])
+    print(eval_results)
 
 
 def main(args):
 
     # Load data and labels
-    train_data, train_labels, eval_data, eval_labels = get_data()
+    train_data, train_labels, eval_data, eval_labels = get_data(args.data_dir)
 
     with mlflow.start_run():
+        # Log training parameters with mlflow
+        mlflow.log_param("Batch size", args.batch_size)
+        if args.early_stopping:
+            mlflow.log_param("Number of epochs", "early stopping")
+        else:
+            mlflow.log_param("Number of epochs", args.num_epochs)
+        mlflow.log_param("Learning rate", args.learning_rate)
+        mlflow.log_param("Optimizer", args.optimizer)
+
         # Create estimator and input function
         mnist_classifier, train_input_fn = estimator_creation(args, train_data, train_labels)
 
         # Training and evaluation
-        train_and_evaluate(mnist_classifier, train_input_fn, eval_data, eval_labels)
+        train_and_evaluate(args, mnist_classifier, train_input_fn, eval_data, eval_labels)
+
+        feat_spec = {
+            "x": tf.placeholder("float", name="features",
+                                       shape=[None, train_data.shape[1], train_data.shape[2]])}
+        # Building a receiver function for exporting
+        receiver_fn = tf.estimator.export.build_raw_serving_input_receiver_fn(feat_spec)
+
+        saved_estimator_path = mnist_classifier.export_savedmodel(args.model_dir, receiver_fn).decode("utf-8")
+        print('Model saved into {}'.format(saved_estimator_path))
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Training parameters')
     parser.add_argument('--batch_size', type=int, default=100,
                         help='Number of examples for each training step')
+    parser.add_argument('--learning_rate', type=float, default=0.001,
+                        help='Learning rate')
+    parser.add_argument('--optimizer', type=str, default="gd",
+                        choices=["gd", "adam", "rms", "momentum", "adadelta", "adagrad"],
+                        help='Optimizer to use')
     parser.add_argument('--num_epochs', type=int, default=1,
                         help='Number of epochs to train')
     parser.add_argument('--early_stopping', action="store_true",
                         help='Stop training according to loss value')
+    parser.add_argument('--es_max_steps_no_decrease', type=int, default=50,
+                        help='Early stopping max steps without loss decrease to stop training')
     parser.add_argument('--model_dir', type=str, default="/tmp/mnist_convnet_model",
                         help='Directory to save checkpoints and tensorboard events')
+    parser.add_argument('--data_dir', type=str, default="/tmp/tf_data",
+                        help='Directory to store data')
 
     args = parser.parse_args()
 
