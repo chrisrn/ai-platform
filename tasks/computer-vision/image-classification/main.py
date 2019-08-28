@@ -125,8 +125,8 @@ def get_data(data_path):
 
 def estimator_creation(args, train_data, train_labels):
     """
-
-    :param args:
+    Function for estimator objects creation
+    :param args: argparse arguments
     :param train_data: numpy array with training data
     :param train_labels: numpy array with training labels
     :return: classifier estimator object and input function estimator object
@@ -151,13 +151,13 @@ def estimator_creation(args, train_data, train_labels):
 
 def train_and_evaluate(args, mnist_classifier, train_input_fn, eval_data, eval_labels):
     """
-
-    :param args:
-    :param mnist_classifier:
-    :param train_input_fn:
-    :param eval_data:
-    :param eval_labels:
-    :return:
+    Function for training the CNN with TF estimators and evaluation
+    :param args: argparse arguments
+    :param mnist_classifier: classifier estimator object
+    :param train_input_fn: input function estimator object
+    :param eval_data: numpy array with evaluation data
+    :param eval_labels: numpy array with evaluation labels
+    :return: None
     """
     hooks = []
     if args.early_stopping:
